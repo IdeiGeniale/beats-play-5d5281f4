@@ -1,8 +1,8 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pause, Play, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Beatmap, HitObject, HitCircle, Slider, Spinner, GameState, HitJudgement } from '@/types/game';
+import { Beatmap, HitCircle, Slider, Spinner, GameState, HitJudgement } from '@/types/game';
 import { gameEngine } from '@/lib/gameEngine';
 import { audioEngine } from '@/lib/audioEngine';
 
@@ -21,13 +21,19 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
+  const lastRenderTimeRef = useRef<number>(0);
+  const judgementsRef = useRef<HitJudgement[]>([]);
+  const gameStateRef = useRef<GameState | null>(null);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isPaused, setIsPaused] = useState(false);
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [judgements, setJudgements] = useState<HitJudgement[]>([]);
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
+  const [isMobile] = useState(() => 'ontouchstart' in window || navigator.maxTouchPoints > 0);
+
+  // Memoize combo colors for performance
+  const comboColors = useMemo(() => beatmap.comboColors, [beatmap.comboColors]);
 
   // Calculate canvas scale to fit container
   useEffect(() => {
@@ -58,9 +64,12 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     gameEngine.loadBeatmap(beatmap);
     gameEngine.setMods(mods);
     
-    gameEngine.onStateUpdate = (state) => setGameState(state);
+    gameEngine.onStateUpdate = (state) => {
+      gameStateRef.current = state;
+      setGameState(state);
+    };
     gameEngine.onJudgement = (judgement) => {
-      setJudgements(prev => [...prev.slice(-10), judgement]);
+      judgementsRef.current = [...judgementsRef.current.slice(-10), judgement];
     };
     gameEngine.onGameEnd = (state) => onGameEnd(state);
     gameEngine.onFail = () => {
@@ -85,20 +94,31 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     };
   }, [beatmap, mods, onGameEnd]);
 
-  // Game loop
+  // Game loop with throttled rendering
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
-    const render = () => {
-      if (!isPaused && !showCountdown) {
-        gameEngine.update();
+    // Target 60fps but allow higher on capable devices
+    const targetFps = 60;
+    const frameInterval = 1000 / targetFps;
+
+    const render = (timestamp: number) => {
+      const elapsed = timestamp - lastRenderTimeRef.current;
+      
+      if (elapsed >= frameInterval) {
+        lastRenderTimeRef.current = timestamp - (elapsed % frameInterval);
+        
+        if (!isPaused && !showCountdown) {
+          gameEngine.update();
+        }
+        
+        drawGame(ctx);
       }
       
-      drawGame(ctx);
       animationRef.current = requestAnimationFrame(render);
     };
 
@@ -113,7 +133,10 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
 
   const drawGame = useCallback((ctx: CanvasRenderingContext2D) => {
     const canvas = ctx.canvas;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Clear with background color for better performance (no alpha)
+    ctx.fillStyle = '#0a0a0f';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw playfield background
     ctx.save();
@@ -132,39 +155,40 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     const activeSliders = gameEngine.getActiveSliders();
     const activeSpinners = gameEngine.getActiveSpinners();
 
-    // Draw objects in reverse order (newest on top)
-    const objects = beatmap.hitObjects.slice().reverse();
+    // Cache beatmap objects length
+    const hitObjects = beatmap.hitObjects;
+    const objectCount = hitObjects.length;
     
-    for (let i = objects.length - 1; i >= 0; i--) {
-      const obj = objects[i];
-      const objIndex = beatmap.hitObjects.indexOf(obj);
+    // Draw objects in reverse order (oldest first = bottom, newest on top)
+    for (let i = objectCount - 1; i >= 0; i--) {
+      const obj = hitObjects[i];
       
-      if (processedObjects.has(objIndex)) continue;
+      if (processedObjects.has(i)) continue;
       
       const timeUntilHit = obj.time - currentTime;
       
-      // Only draw objects within approach time
-      if (timeUntilHit > approachTime || timeUntilHit < -500) continue;
+      // Skip objects outside visible range
+      if (timeUntilHit > approachTime || timeUntilHit < -300) continue;
       
       const approachProgress = Math.max(0, Math.min(1, 1 - timeUntilHit / approachTime));
-      const comboColor = beatmap.comboColors[obj.comboColor % beatmap.comboColors.length];
+      const comboColor = comboColors[obj.comboColor % comboColors.length];
       
       if (obj.type === 'circle') {
         drawHitCircle(ctx, obj as HitCircle, circleRadius, approachProgress, comboColor);
       } else if (obj.type === 'slider') {
-        const activeSlider = activeSliders.get(objIndex);
+        const activeSlider = activeSliders.get(i);
         drawSlider(ctx, obj as Slider, circleRadius, approachProgress, comboColor, activeSlider?.progress || 0);
       } else if (obj.type === 'spinner') {
-        const activeSpinner = activeSpinners.get(objIndex);
+        const activeSpinner = activeSpinners.get(i);
         drawSpinner(ctx, obj as Spinner, currentTime, activeSpinner?.spinsCompleted || 0, activeSpinner?.requiredSpins || 1);
       }
     }
 
     ctx.restore();
 
-    // Draw judgements
+    // Draw judgements from ref (avoid state updates during render)
     drawJudgements(ctx);
-  }, [beatmap, scale, offset]);
+  }, [beatmap.hitObjects, comboColors, scale, offset]);
 
   const drawHitCircle = (
     ctx: CanvasRenderingContext2D, 
@@ -358,8 +382,10 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
 
   const drawJudgements = (ctx: CanvasRenderingContext2D) => {
     const now = Date.now();
+    const judgements = judgementsRef.current;
     
-    for (const judgement of judgements) {
+    for (let i = 0; i < judgements.length; i++) {
+      const judgement = judgements[i];
       const age = now - judgement.time;
       if (age > 500) continue;
       
@@ -395,8 +421,8 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
       
       ctx.fillStyle = color;
       ctx.fillText(text, x, y);
-      ctx.globalAlpha = 1;
     }
+    ctx.globalAlpha = 1;
   };
 
   const shadeColor = (color: string, percent: number) => {
@@ -482,7 +508,7 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     gameEngine.stop();
     setCountdown(3);
     setShowCountdown(true);
-    setJudgements([]);
+    judgementsRef.current = [];
     setIsPaused(false);
     
     let count = 3;
@@ -539,15 +565,17 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
         </div>
       </div>
 
-      {/* Canvas */}
+      {/* Canvas - cursor visible on PC, touch optimized on mobile */}
       <canvas
         ref={canvasRef}
         width={PLAYFIELD_WIDTH * scale + offset.x * 2}
         height={PLAYFIELD_HEIGHT * scale + offset.y * 2}
-        className="absolute inset-0 w-full h-full cursor-none"
-        onClick={handleCanvasClick}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        className="absolute inset-0 w-full h-full touch-none"
+        style={{ cursor: isMobile ? 'none' : 'crosshair' }}
+        onClick={!isMobile ? handleCanvasClick : undefined}
+        onMouseMove={!isMobile ? handleMouseMove : undefined}
+        onMouseUp={!isMobile ? handleMouseUp : undefined}
+        onMouseDown={!isMobile ? handleCanvasClick : undefined}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleMouseUp}
