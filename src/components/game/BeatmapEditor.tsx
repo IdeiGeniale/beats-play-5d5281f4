@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
   Play, 
@@ -8,18 +7,15 @@ import {
   Minus, 
   RotateCw, 
   Save, 
-  Upload, 
   Trash2,
-  ZoomIn,
-  ZoomOut,
   Grid,
   Music
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-import { Beatmap, HitObject, HitCircle, Slider as SliderType, Spinner, TimingPoint } from '@/types/game';
+import { Slider as UISlider } from '@/components/ui/slider';
+import { Beatmap, HitCircle, Slider as SliderType, Spinner } from '@/types/game';
 import { exportOsuFile } from '@/lib/osuParser';
 import { audioEngine } from '@/lib/audioEngine';
 import { toast } from 'sonner';
@@ -61,7 +57,6 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedTool, setSelectedTool] = useState<'circle' | 'slider' | 'spinner' | 'select'>('circle');
   const [selectedObject, setSelectedObject] = useState<number | null>(null);
-  const [zoom, setZoom] = useState(1);
   const [beatSnap, setBeatSnap] = useState(4);
   const [bpm, setBpm] = useState(120);
   const [audioLoaded, setAudioLoaded] = useState(false);
@@ -127,19 +122,9 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
     return Math.round(time / snapLength) * snapLength;
   }, [bpm, beatSnap]);
 
-  // Handle canvas click
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = PLAYFIELD_WIDTH / rect.width;
-    const scaleY = PLAYFIELD_HEIGHT / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
-    
+  // Handle canvas interaction at coordinates
+  const handleCanvasAt = useCallback((x: number, y: number) => {
     if (selectedTool === 'select') {
-      // Check if clicked on an object
       const clickedIndex = beatmap.hitObjects.findIndex(obj => {
         const dx = obj.x - x;
         const dy = obj.y - y;
@@ -196,6 +181,36 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
       
       toast.success('Spinner added');
     }
+  }, [selectedTool, isDrawingSlider, snapToBeat, currentTime, beatmap.hitObjects]);
+
+  // Handle canvas click
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = PLAYFIELD_WIDTH / rect.width;
+    const scaleY = PLAYFIELD_HEIGHT / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+    
+    handleCanvasAt(x, y);
+  };
+
+  // Handle touch for mobile
+  const handleCanvasTouch = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const scaleX = PLAYFIELD_WIDTH / rect.width;
+    const scaleY = PLAYFIELD_HEIGHT / rect.height;
+    const x = Math.round((touch.clientX - rect.left) * scaleX);
+    const y = Math.round((touch.clientY - rect.top) * scaleY);
+    
+    handleCanvasAt(x, y);
   };
 
   // Finish slider
@@ -372,13 +387,13 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
   }, [beatmap, currentTime, selectedObject, sliderPoints, isDrawingSlider]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center gap-4 p-4 border-b border-border/50">
+      <header className="flex items-center gap-2 sm:gap-4 p-2 sm:p-4 border-b border-border/50 flex-shrink-0">
         <Button variant="ghost" size="icon" onClick={onBack}>
           <ArrowLeft className="w-5 h-5" />
         </Button>
-        <h1 className="font-display text-2xl font-bold">Beatmap Editor</h1>
+        <h1 className="font-display text-lg sm:text-2xl font-bold truncate">Beatmap Editor</h1>
         
         <div className="flex-1" />
         
@@ -389,20 +404,70 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
           className="hidden"
           onChange={handleAudioUpload}
         />
-        <Button variant="outline" onClick={() => audioInputRef.current?.click()}>
+        <Button variant="outline" size="sm" className="hidden sm:flex" onClick={() => audioInputRef.current?.click()}>
           <Music className="w-4 h-4 mr-2" />
           {audioLoaded ? 'Change Audio' : 'Load Audio'}
         </Button>
+        <Button variant="ghost" size="icon" className="sm:hidden" onClick={() => audioInputRef.current?.click()}>
+          <Music className="w-5 h-5" />
+        </Button>
         
-        <Button variant="neon" onClick={handleExport}>
+        <Button variant="neon" size="sm" className="hidden sm:flex" onClick={handleExport}>
           <Save className="w-4 h-4 mr-2" />
           Export .osu
         </Button>
+        <Button variant="neon" size="icon" className="sm:hidden" onClick={handleExport}>
+          <Save className="w-5 h-5" />
+        </Button>
       </header>
 
-      <div className="flex-1 flex">
-        {/* Toolbar */}
-        <div className="w-16 border-r border-border/30 p-2 flex flex-col gap-2">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        {/* Mobile toolbar - horizontal */}
+        <div className="lg:hidden flex items-center gap-1 p-2 border-b border-border/30 flex-shrink-0 overflow-x-auto">
+          <Button
+            variant={selectedTool === 'select' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setSelectedTool('select')}
+          >
+            <Grid className="w-4 h-4 mr-1" />
+            Select
+          </Button>
+          <Button
+            variant={selectedTool === 'circle' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setSelectedTool('circle')}
+          >
+            <Circle className="w-4 h-4 mr-1" />
+            Circle
+          </Button>
+          <Button
+            variant={selectedTool === 'slider' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setSelectedTool('slider')}
+          >
+            <Minus className="w-4 h-4 mr-1" />
+            Slider
+          </Button>
+          <Button
+            variant={selectedTool === 'spinner' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setSelectedTool('spinner')}
+          >
+            <RotateCw className="w-4 h-4 mr-1" />
+            Spinner
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={deleteSelected}
+            disabled={selectedObject === null}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Desktop toolbar - vertical */}
+        <div className="hidden lg:flex w-16 border-r border-border/30 p-2 flex-col gap-2 flex-shrink-0">
           <Button
             variant={selectedTool === 'select' ? 'default' : 'ghost'}
             size="icon"
@@ -450,39 +515,43 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
         </div>
 
         {/* Main editor area */}
-        <div className="flex-1 flex flex-col">
-          {/* Canvas */}
-          <div className="flex-1 flex items-center justify-center p-4 bg-muted/20">
-            <div className="relative" style={{ width: PLAYFIELD_WIDTH, height: PLAYFIELD_HEIGHT }}>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Canvas - responsive sizing */}
+          <div className="flex-1 flex items-center justify-center p-2 sm:p-4 bg-muted/20 overflow-auto">
+            <div 
+              className="relative w-full max-w-[512px] aspect-[512/384]"
+              style={{ maxHeight: 'calc(100vh - 280px)' }}
+            >
               <canvas
                 ref={canvasRef}
                 width={PLAYFIELD_WIDTH}
                 height={PLAYFIELD_HEIGHT}
-                className="border border-border rounded-lg cursor-crosshair"
+                className="w-full h-full border border-border rounded-lg cursor-crosshair touch-none"
                 onClick={handleCanvasClick}
                 onDoubleClick={isDrawingSlider ? finishSlider : undefined}
+                onTouchStart={handleCanvasTouch}
               />
               {isDrawingSlider && (
-                <div className="absolute top-2 left-2 bg-secondary/90 text-secondary-foreground px-3 py-1 rounded text-sm">
+                <div className="absolute top-2 left-2 bg-secondary/90 text-secondary-foreground px-2 py-1 rounded text-xs sm:text-sm">
                   Click to add points, double-click to finish
                 </div>
               )}
             </div>
           </div>
 
-          {/* Timeline */}
-          <div className="h-32 border-t border-border/30 p-4">
-            <div className="flex items-center gap-4 mb-4">
+          {/* Timeline - responsive */}
+          <div className="h-auto min-h-[100px] sm:h-32 border-t border-border/30 p-2 sm:p-4 flex-shrink-0">
+            <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-4 flex-wrap">
               <Button variant="ghost" size="icon" onClick={togglePlayback}>
                 {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
               </Button>
               
-              <span className="font-mono text-sm">
+              <span className="font-mono text-xs sm:text-sm">
                 {Math.floor(currentTime / 60000)}:{Math.floor((currentTime % 60000) / 1000).toString().padStart(2, '0')}
               </span>
               
-              <Slider
-                className="flex-1"
+              <UISlider
+                className="flex-1 min-w-[100px]"
                 value={[currentTime]}
                 onValueChange={([v]) => {
                   setCurrentTime(v);
@@ -494,22 +563,22 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
                 step={1}
               />
               
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">BPM:</Label>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Label className="text-xs hidden sm:inline">BPM:</Label>
                 <Input
                   type="number"
                   value={bpm}
                   onChange={(e) => setBpm(Number(e.target.value) || 120)}
-                  className="w-20 h-8"
+                  className="w-16 sm:w-20 h-8 text-xs"
                 />
               </div>
               
-              <div className="flex items-center gap-2">
-                <Label className="text-xs">Snap:</Label>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Label className="text-xs hidden sm:inline">Snap:</Label>
                 <select
                   value={beatSnap}
                   onChange={(e) => setBeatSnap(Number(e.target.value))}
-                  className="h-8 px-2 rounded bg-muted border border-border text-sm"
+                  className="h-8 px-2 rounded bg-muted border border-border text-xs sm:text-sm"
                 >
                   <option value={1}>1/1</option>
                   <option value={2}>1/2</option>
@@ -523,7 +592,7 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
             {/* Object timeline */}
             <div 
               ref={timelineRef}
-              className="relative h-12 bg-muted rounded overflow-hidden"
+              className="relative h-8 sm:h-12 bg-muted rounded overflow-hidden"
             >
               {beatmap.hitObjects.map((obj, i) => {
                 const duration = audioLoaded ? audioEngine.getDuration() : 300000;
@@ -531,7 +600,7 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
                 return (
                   <div
                     key={i}
-                    className={`absolute top-1/2 -translate-y-1/2 w-2 h-8 rounded cursor-pointer transition-colors ${
+                    className={`absolute top-1/2 -translate-y-1/2 w-1.5 sm:w-2 h-6 sm:h-8 rounded cursor-pointer transition-colors ${
                       i === selectedObject ? 'bg-primary' : 'bg-secondary'
                     }`}
                     style={{ left: `${left}%` }}
@@ -551,16 +620,17 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
           </div>
         </div>
 
-        {/* Properties panel */}
-        <div className="w-64 border-l border-border/30 p-4 space-y-4">
-          <h3 className="font-display font-bold">Beatmap Info</h3>
+        {/* Properties panel - collapsible on mobile */}
+        <div className="lg:w-64 border-t lg:border-t-0 lg:border-l border-border/30 p-3 sm:p-4 space-y-3 sm:space-y-4 flex-shrink-0 max-h-[200px] lg:max-h-none overflow-y-auto">
+          <h3 className="font-display font-bold text-sm sm:text-base">Beatmap Info</h3>
           
-          <div className="space-y-3">
+          <div className="grid grid-cols-2 lg:grid-cols-1 gap-2 sm:gap-3">
             <div>
               <Label className="text-xs">Title</Label>
               <Input
                 value={beatmap.title}
                 onChange={(e) => setBeatmap(prev => ({ ...prev, title: e.target.value }))}
+                className="h-8 text-sm"
               />
             </div>
             <div>
@@ -568,19 +638,21 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
               <Input
                 value={beatmap.artist}
                 onChange={(e) => setBeatmap(prev => ({ ...prev, artist: e.target.value }))}
+                className="h-8 text-sm"
               />
             </div>
-            <div>
+            <div className="col-span-2 lg:col-span-1">
               <Label className="text-xs">Difficulty</Label>
               <Input
                 value={beatmap.version}
                 onChange={(e) => setBeatmap(prev => ({ ...prev, version: e.target.value }))}
+                className="h-8 text-sm"
               />
             </div>
           </div>
           
-          <div className="pt-4 border-t border-border/30">
-            <h3 className="font-display font-bold mb-3">Difficulty Settings</h3>
+          <div className="pt-2 sm:pt-4 border-t border-border/30 hidden lg:block">
+            <h3 className="font-display font-bold mb-3 text-sm">Difficulty Settings</h3>
             
             {[
               { key: 'circleSize', label: 'Circle Size' },
@@ -593,7 +665,7 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
                   <span>{label}</span>
                   <span>{(beatmap as any)[key]}</span>
                 </div>
-                <Slider
+                <UISlider
                   value={[(beatmap as any)[key]]}
                   onValueChange={([v]) => setBeatmap(prev => ({ ...prev, [key]: v }))}
                   min={0}
@@ -604,8 +676,8 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
             ))}
           </div>
           
-          <div className="pt-4 border-t border-border/30">
-            <p className="text-sm text-muted-foreground">
+          <div className="pt-2 sm:pt-4 border-t border-border/30">
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Objects: {beatmap.hitObjects.length}
             </p>
           </div>
