@@ -183,8 +183,13 @@ export class GameEngine {
     // Update active spinners
     this.updateActiveSpinners();
     
-    // HP drain
-    if (this.gameState.hp > 0) {
+    // Check if in break period - no HP drain during breaks
+    const inBreak = this.beatmap.breaks.some(
+      b => this.currentTime >= b.startTime && this.currentTime <= b.endTime
+    );
+    
+    // HP drain (not during breaks)
+    if (this.gameState.hp > 0 && !inBreak) {
       const drainRate = this.beatmap.hpDrainRate * 0.01 * timeMultiplier;
       if (this.mods.has('ez')) {
         this.gameState.hp -= drainRate * 0.5;
@@ -200,7 +205,22 @@ export class GameEngine {
       }
     }
     
-    // Check if song ended
+    // Check if all objects processed - end game when no more objects
+    const allProcessed = this.processedObjects.size >= this.beatmap.hitObjects.length;
+    const lastObject = this.beatmap.hitObjects[this.beatmap.hitObjects.length - 1];
+    const lastObjectEndTime = lastObject?.type === 'slider' 
+      ? (lastObject as Slider).time + (lastObject as Slider).duration
+      : lastObject?.type === 'spinner'
+        ? (lastObject as Spinner).endTime
+        : lastObject?.time || 0;
+    
+    // End game when all objects done and past the last object
+    if (allProcessed && this.currentTime > lastObjectEndTime + 1000) {
+      this.endGame();
+      return;
+    }
+    
+    // Fallback: check if song ended
     if (this.currentTime >= audioEngine.getDuration()) {
       this.endGame();
     }
@@ -555,6 +575,10 @@ export class GameEngine {
 
   isGameRunning(): boolean {
     return this.isRunning;
+  }
+
+  getBreaks(): { startTime: number; endTime: number }[] {
+    return this.beatmap?.breaks || [];
   }
 }
 

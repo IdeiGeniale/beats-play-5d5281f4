@@ -21,6 +21,7 @@ export function parseOsuFile(content: string): Beatmap {
     sliderTickRate: 1,
     comboColors: ['#ff2d95', '#00f0ff', '#8b5cf6', '#ffd700'],
     timingPoints: [],
+    breaks: [],
     hitObjects: [],
   };
 
@@ -48,6 +49,9 @@ export function parseOsuFile(content: string): Beatmap {
         break;
       case 'TimingPoints':
         parseTimingPoint(line, beatmap);
+        break;
+      case 'Events':
+        parseEvent(line, beatmap);
         break;
       case 'Colours':
         parseColor(line, beatmap);
@@ -160,6 +164,17 @@ function parseDifficulty(line: string, beatmap: Beatmap) {
     case 'SliderTickRate':
       beatmap.sliderTickRate = numValue;
       break;
+  }
+}
+
+function parseEvent(line: string, beatmap: Beatmap) {
+  const parts = line.split(',');
+  // Break period: 2,startTime,endTime
+  if (parts[0] === '2' && parts.length >= 3) {
+    beatmap.breaks.push({
+      startTime: parseInt(parts[1]),
+      endTime: parseInt(parts[2]),
+    });
   }
 }
 

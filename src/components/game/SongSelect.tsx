@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Upload, Play, Music, User, Clock, Zap, FileText } from 'lucide-react';
+import { ArrowLeft, Upload, Play, Music, User, Clock, Zap, FileText, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Beatmap, MODS, Mod } from '@/types/game';
 import { parseOsuFile } from '@/lib/osuParser';
 import { audioEngine } from '@/lib/audioEngine';
 import { toast } from 'sonner';
+import JSZip from 'jszip';
 
 interface SongSelectProps {
   onBack: () => void;
@@ -15,6 +16,7 @@ interface SongSelectProps {
 interface BeatmapEntry {
   beatmap: Beatmap;
   audioFile: File | null;
+  oszName?: string;
 }
 
 export const SongSelect = ({ onBack, onStartGame }: SongSelectProps) => {
@@ -24,6 +26,7 @@ export const SongSelect = ({ onBack, onStartGame }: SongSelectProps) => {
   const [isLoading, setIsLoading] = useState(false);
   
   const osuInputRef = useRef<HTMLInputElement>(null);
+  const oszInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
   const selectedBeatmap = selectedIndex >= 0 ? beatmaps[selectedIndex] : null;
@@ -46,7 +49,76 @@ export const SongSelect = ({ onBack, onStartGame }: SongSelectProps) => {
     }
     
     setIsLoading(false);
-    e.target.value = '';
+    if (e.target) e.target.value = '';
+  };
+
+  const handleOszUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    setIsLoading(true);
+    
+    for (const file of Array.from(files)) {
+      try {
+        const zip = await JSZip.loadAsync(file);
+        const oszName = file.name.replace('.osz', '');
+        
+        // Find audio file (usually audio.mp3 or similar)
+        let audioBlob: Blob | null = null;
+        let audioFileName = '';
+        
+        // Parse all .osu files and find audio
+        const osuFiles: { name: string; content: string }[] = [];
+        
+        for (const [fileName, zipEntry] of Object.entries(zip.files)) {
+          if (fileName.endsWith('.osu')) {
+            const content = await zipEntry.async('string');
+            osuFiles.push({ name: fileName, content });
+          } else if (fileName.match(/\.(mp3|ogg|wav)$/i) && !audioBlob) {
+            audioBlob = await zipEntry.async('blob');
+            audioFileName = fileName;
+          }
+        }
+
+        if (osuFiles.length === 0) {
+          toast.error(`No .osu files found in ${file.name}`);
+          continue;
+        }
+
+        // Create audio file if found
+        let audioFile: File | null = null;
+        if (audioBlob) {
+          audioFile = new File([audioBlob], audioFileName, { type: 'audio/mpeg' });
+        }
+
+        // Parse each .osu file and add to beatmaps
+        for (const osuFile of osuFiles) {
+          try {
+            const beatmap = parseOsuFile(osuFile.content);
+            setBeatmaps(prev => [...prev, { 
+              beatmap, 
+              audioFile,
+              oszName 
+            }]);
+          } catch (err) {
+            console.error(`Failed to parse ${osuFile.name}:`, err);
+          }
+        }
+
+        toast.success(`Loaded ${osuFiles.length} beatmaps from ${file.name}`);
+        
+        // If audio was found, preload it for the first beatmap
+        if (audioFile) {
+          await audioEngine.loadAudioFromFile(audioFile);
+        }
+      } catch (err) {
+        console.error('OSZ parsing error:', err);
+        toast.error(`Failed to load: ${file.name}`);
+      }
+    }
+    
+    setIsLoading(false);
+    if (e.target) e.target.value = '';
   };
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,6 +198,23 @@ export const SongSelect = ({ onBack, onStartGame }: SongSelectProps) => {
           className="hidden"
           onChange={handleOsuUpload}
         />
+        <input
+          ref={oszInputRef}
+          type="file"
+          accept=".osz"
+          multiple
+          className="hidden"
+          onChange={handleOszUpload}
+        />
+        <Button 
+          variant="neonCyan" 
+          onClick={() => oszInputRef.current?.click()}
+          disabled={isLoading}
+          className="mr-2"
+        >
+          <Package className="w-4 h-4 mr-2" />
+          Import .osz
+        </Button>
         <Button 
           variant="neon" 
           onClick={() => osuInputRef.current?.click()}

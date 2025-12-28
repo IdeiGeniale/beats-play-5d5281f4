@@ -50,6 +50,7 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
     sliderTickRate: 1,
     comboColors: ['#ff2d95', '#00f0ff', '#8b5cf6', '#ffd700'],
     timingPoints: [{ time: 0, beatLength: 500, meter: 4, sampleSet: 0, sampleIndex: 0, volume: 100, uninherited: true, effects: 0 }],
+    breaks: [],
     hitObjects: [],
   });
   
