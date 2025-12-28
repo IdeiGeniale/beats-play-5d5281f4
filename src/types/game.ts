@@ -59,6 +59,11 @@ export interface TimingPoint {
   effects: number;
 }
 
+export interface BreakPeriod {
+  startTime: number;
+  endTime: number;
+}
+
 export interface Beatmap {
   // General
   audioFilename: string;
@@ -92,6 +97,9 @@ export interface Beatmap {
 
   // Timing
   timingPoints: TimingPoint[];
+
+  // Break periods
+  breaks: BreakPeriod[];
 
   // Hit objects
   hitObjects: HitObject[];

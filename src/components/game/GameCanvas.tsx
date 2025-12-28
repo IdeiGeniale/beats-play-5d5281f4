@@ -147,8 +147,26 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.fillRect(0, 0, PLAYFIELD_WIDTH, PLAYFIELD_HEIGHT);
 
-    // Draw hit objects
+    // Check for break period
     const currentTime = gameEngine.getCurrentTime();
+    const breaks = gameEngine.getBreaks();
+    const inBreak = breaks.some(b => currentTime >= b.startTime && currentTime <= b.endTime);
+    
+    // Draw break indicator
+    if (inBreak) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      ctx.fillRect(0, 0, PLAYFIELD_WIDTH, PLAYFIELD_HEIGHT);
+      
+      ctx.font = 'bold 32px Orbitron';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 0.7;
+      ctx.fillText('BREAK', PLAYFIELD_WIDTH / 2, PLAYFIELD_HEIGHT / 2);
+      ctx.globalAlpha = 1;
+    }
+
+    // Draw hit objects
     const approachTime = gameEngine.getApproachTime();
     const circleRadius = gameEngine.getCircleRadius();
     const processedObjects = gameEngine.getProcessedObjects();
@@ -281,6 +299,21 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     
     ctx.globalAlpha = alpha;
 
+    // Draw reverse arrows if slides > 1
+    if (slider.slides > 1) {
+      const endPoint = slider.curvePoints.length > 0 
+        ? slider.curvePoints[slider.curvePoints.length - 1] 
+        : { x: slider.x, y: slider.y };
+      
+      // Draw reverse arrow at end
+      drawReverseArrow(ctx, endPoint.x, endPoint.y, slider.x, slider.y, radius, color, alpha);
+      
+      // Draw reverse arrow at start if slides > 2
+      if (slider.slides > 2) {
+        drawReverseArrow(ctx, slider.x, slider.y, endPoint.x, endPoint.y, radius, color, alpha);
+      }
+    }
+
     // Slider ball (if active)
     if (progress > 0) {
       const ballPos = getSliderPosition(slider, progress);
@@ -288,7 +321,26 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
       ctx.arc(ballPos.x, ballPos.y, radius * 0.8, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
+      
+      // Add glow to slider ball
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 10;
+      ctx.fill();
+      ctx.shadowBlur = 0;
     }
+
+    // Draw end circle
+    if (slider.curvePoints.length > 0) {
+      const endPoint = slider.curvePoints[slider.curvePoints.length - 1];
+      ctx.beginPath();
+      ctx.arc(endPoint.x, endPoint.y, radius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = alpha * 0.6;
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = alpha;
 
     // Start circle
     drawHitCircle(ctx, {
@@ -301,6 +353,41 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     }, radius, approach, color);
 
     ctx.globalAlpha = 1;
+  };
+
+  const drawReverseArrow = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    fromX: number,
+    fromY: number,
+    radius: number,
+    color: string,
+    alpha: number
+  ) => {
+    const angle = Math.atan2(fromY - y, fromX - x);
+    const arrowSize = radius * 0.6;
+    
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    
+    // Draw arrow shape
+    ctx.beginPath();
+    ctx.moveTo(arrowSize, 0);
+    ctx.lineTo(-arrowSize * 0.5, -arrowSize * 0.6);
+    ctx.lineTo(-arrowSize * 0.2, 0);
+    ctx.lineTo(-arrowSize * 0.5, arrowSize * 0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.restore();
   };
 
   const getSliderPosition = (slider: Slider, progress: number) => {
