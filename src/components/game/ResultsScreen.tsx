@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Trophy, Target, Zap, XCircle, ArrowLeft, RotateCcw, Share } from 'lucide-react';
+import { Trophy, Target, Zap, XCircle, ArrowLeft, RotateCcw, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GameState, Beatmap } from '@/types/game';
 
@@ -9,9 +9,10 @@ interface ResultsScreenProps {
   mods: string[];
   onBack: () => void;
   onRetry: () => void;
+  onWatchReplay?: () => void;
 }
 
-export const ResultsScreen = ({ state, beatmap, mods, onBack, onRetry }: ResultsScreenProps) => {
+export const ResultsScreen = ({ state, beatmap, mods, onBack, onRetry, onWatchReplay }: ResultsScreenProps) => {
   const getRank = () => {
     if (state.accuracy >= 100) return { grade: 'SS', color: 'text-gold' };
     if (state.accuracy >= 95) return { grade: 'S', color: 'text-gold' };
@@ -141,7 +142,7 @@ export const ResultsScreen = ({ state, beatmap, mods, onBack, onRetry }: Results
 
         {/* Actions */}
         <motion.div 
-          className="flex justify-center gap-4"
+          className="flex flex-wrap justify-center gap-4"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1 }}
@@ -150,6 +151,12 @@ export const ResultsScreen = ({ state, beatmap, mods, onBack, onRetry }: Results
             <ArrowLeft className="w-5 h-5 mr-2" />
             Back to Menu
           </Button>
+          {onWatchReplay && (
+            <Button variant="neon" size="lg" onClick={onWatchReplay}>
+              <Play className="w-5 h-5 mr-2" />
+              Watch Replay
+            </Button>
+          )}
           <Button variant="hero" size="lg" onClick={onRetry}>
             <RotateCcw className="w-5 h-5 mr-2" />
             Retry

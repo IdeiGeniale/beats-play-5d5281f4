@@ -8,13 +8,15 @@ interface MainMenuProps {
   onPlay: () => void;
   onEditor: () => void;
   onSettings: () => void;
+  onScores: () => void;
 }
 
-export const MainMenu = ({ onPlay, onEditor, onSettings }: MainMenuProps) => {
+export const MainMenu = ({ onPlay, onEditor, onSettings, onScores }: MainMenuProps) => {
   const menuItems = [
     { icon: Play, label: 'Play', action: onPlay, delay: 0.2 },
-    { icon: Edit3, label: 'Editor', action: onEditor, delay: 0.3 },
-    { icon: Settings, label: 'Settings', action: onSettings, delay: 0.4 },
+    { icon: Trophy, label: 'Scores', action: onScores, delay: 0.3 },
+    { icon: Edit3, label: 'Editor', action: onEditor, delay: 0.4 },
+    { icon: Settings, label: 'Settings', action: onSettings, delay: 0.5 },
   ];
 
   return (
