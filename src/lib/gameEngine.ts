@@ -27,9 +27,10 @@ interface ActiveSlider {
 interface ActiveSpinner {
   spinner: Spinner;
   rotation: number;
-  lastAngle: number;
+  lastAngle: number | null;
   spinsCompleted: number;
   requiredSpins: number;
+  isActive: boolean;
 }
 
 export class GameEngine {
@@ -174,6 +175,9 @@ export class GameEngine {
     // Apply speed mod
     const timeMultiplier = this.mods.has('dt') ? 1.5 : this.mods.has('ht') ? 0.75 : 1;
     
+    // Auto-activate spinners when they start
+    this.activateSpinners();
+    
     // Check for missed objects
     this.checkMissedObjects();
     
@@ -227,6 +231,29 @@ export class GameEngine {
 
     if (this.onStateUpdate) {
       this.onStateUpdate({ ...this.gameState });
+    }
+  }
+
+  private activateSpinners(): void {
+    if (!this.beatmap) return;
+
+    for (let i = 0; i < this.beatmap.hitObjects.length; i++) {
+      const obj = this.beatmap.hitObjects[i];
+      if (obj.type !== 'spinner') continue;
+      if (this.processedObjects.has(i)) continue;
+      if (this.activeSpinners.has(i)) continue;
+
+      const spinner = obj as Spinner;
+      if (this.currentTime >= spinner.time && this.currentTime <= spinner.endTime) {
+        this.activeSpinners.set(i, {
+          spinner,
+          rotation: 0,
+          lastAngle: null,
+          spinsCompleted: 0,
+          requiredSpins: Math.ceil((spinner.endTime - spinner.time) / 1000 * 2.5),
+          isActive: true,
+        });
+      }
     }
   }
 
@@ -333,16 +360,23 @@ export class GameEngine {
             return;
           }
         } else if (obj.type === 'spinner') {
+          // Spinners auto-activate, but clicking confirms interaction
           const spinner = obj as Spinner;
           if (this.currentTime >= spinner.time && this.currentTime <= spinner.endTime) {
             if (!this.activeSpinners.has(i)) {
               this.activeSpinners.set(i, {
                 spinner,
                 rotation: 0,
-                lastAngle: Math.atan2(y - 192, x - 256),
+                lastAngle: null,
                 spinsCompleted: 0,
-                requiredSpins: Math.ceil((spinner.endTime - spinner.time) / 1000 * 3),
+                requiredSpins: Math.ceil((spinner.endTime - spinner.time) / 1000 * 2.5),
+                isActive: true,
               });
+            }
+            // Set initial angle on click/tap
+            const activeSpinner = this.activeSpinners.get(i);
+            if (activeSpinner) {
+              activeSpinner.lastAngle = Math.atan2(y - 192, x - 256);
             }
             return;
           }
@@ -369,23 +403,33 @@ export class GameEngine {
       }
     }
 
-    // Update spinner rotation
+    // Update spinner rotation - works for any active spinner
     for (const [index, activeSpinner] of this.activeSpinners) {
+      if (activeSpinner.lastAngle === null) {
+        // First movement - initialize the angle
+        activeSpinner.lastAngle = Math.atan2(y - 192, x - 256);
+        continue;
+      }
+      
       const angle = Math.atan2(y - 192, x - 256);
       let deltaAngle = angle - activeSpinner.lastAngle;
       
-      // Normalize angle difference
+      // Normalize angle difference to handle wrap-around
       if (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
       if (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
       
+      // Accumulate rotation (absolute value for spinning in any direction)
       activeSpinner.rotation += Math.abs(deltaAngle);
       activeSpinner.lastAngle = angle;
       
-      // Count spins
-      const newSpins = Math.floor(activeSpinner.rotation / (2 * Math.PI));
+      // Count spins (full rotation = 2*PI)
+      const newSpins = activeSpinner.rotation / (2 * Math.PI);
       if (newSpins > activeSpinner.spinsCompleted) {
+        const spinsGained = Math.floor(newSpins) - Math.floor(activeSpinner.spinsCompleted);
         activeSpinner.spinsCompleted = newSpins;
-        this.addScore(100, false);
+        if (spinsGained > 0) {
+          this.addScore(100 * spinsGained, false);
+        }
       }
     }
   }
