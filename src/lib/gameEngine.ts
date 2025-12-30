@@ -288,6 +288,8 @@ export class GameEngine {
   }
 
   private updateActiveSliders(): void {
+    const slidersToRemove: number[] = [];
+    
     for (const [index, activeSlider] of this.activeSliders) {
       const slider = activeSlider.slider;
       const elapsed = this.currentTime - slider.time;
@@ -297,8 +299,13 @@ export class GameEngine {
       if (activeSlider.progress >= 1) {
         const result = activeSlider.ticksHit >= slider.tickCount * 0.5 ? 'great' : 'good';
         this.processHit(index, result, slider);
-        this.activeSliders.delete(index);
+        slidersToRemove.push(index);
       }
+    }
+    
+    // Remove completed sliders after iteration
+    for (const index of slidersToRemove) {
+      this.activeSliders.delete(index);
     }
   }
 
@@ -435,9 +442,9 @@ export class GameEngine {
   }
 
   handleMouseUp(): void {
-    for (const [index, activeSlider] of this.activeSliders) {
-      activeSlider.isHeld = false;
-    }
+    // Don't immediately release sliders - let them continue tracking
+    // Only set isHeld to false if the slider ball is too far from cursor
+    // This allows for brief releases during slider following
   }
 
   private isPointInCircle(px: number, py: number, cx: number, cy: number, radius?: number): boolean {

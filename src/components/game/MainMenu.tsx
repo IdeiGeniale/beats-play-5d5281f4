@@ -97,6 +97,11 @@ export const MainMenu = ({ onPlay, onEditor, onSettings, onScores }: MainMenuPro
       <div className="absolute bottom-4 right-4 text-xs text-muted-foreground/50 font-mono">
         v1.0.0
       </div>
+      
+      {/* Google Site Verification */}
+      <div className="absolute bottom-0 left-0 w-full text-center text-[0px] opacity-0 pointer-events-none select-none" aria-hidden="true">
+        google-site-verification=uHhRt4LYvA_A3CLGCzJgw3VxuyqSYuoWKQe2f6-xbqQ
+      </div>
     </div>
   );
 };
