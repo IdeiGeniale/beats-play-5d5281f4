@@ -17,6 +17,27 @@ interface GameCanvasProps {
 const PLAYFIELD_WIDTH = 512;
 const PLAYFIELD_HEIGHT = 384;
 
+// Pre-computed color cache for performance
+const colorCache = new Map<string, { shaded: string }>();
+const getShaded = (color: string): string => {
+  let cached = colorCache.get(color);
+  if (!cached) {
+    const num = parseInt(color.replace('#', ''), 16);
+    const amt = Math.round(2.55 * -30);
+    const R = (num >> 16) + amt;
+    const G = (num >> 8 & 0x00FF) + amt;
+    const B = (num & 0x0000FF) + amt;
+    const shaded = '#' + (0x1000000 + 
+      (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 + 
+      (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 + 
+      (B < 255 ? B < 1 ? 0 : B : 255)
+    ).toString(16).slice(1);
+    cached = { shaded };
+    colorCache.set(color, cached);
+  }
+  return cached.shaded;
+};
+
 export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -24,6 +45,9 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
   const lastRenderTimeRef = useRef<number>(0);
   const judgementsRef = useRef<HitJudgement[]>([]);
   const gameStateRef = useRef<GameState | null>(null);
+  const stateUpdateCounterRef = useRef(0);
+  const scaleRef = useRef(1);
+  const offsetRef = useRef({ x: 0, y: 0 });
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isPaused, setIsPaused] = useState(false);
@@ -47,11 +71,13 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
       const scaleY = containerHeight / PLAYFIELD_HEIGHT;
       const newScale = Math.min(scaleX, scaleY) * 0.9;
       
-      setScale(newScale);
-      setOffset({
+      scaleRef.current = newScale;
+      offsetRef.current = {
         x: (containerWidth - PLAYFIELD_WIDTH * newScale) / 2,
         y: (containerHeight - PLAYFIELD_HEIGHT * newScale) / 2,
-      });
+      };
+      setScale(newScale);
+      setOffset(offsetRef.current);
     };
 
     updateScale();
@@ -64,12 +90,22 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     gameEngine.loadBeatmap(beatmap);
     gameEngine.setMods(mods);
     
+    // Throttle state updates to reduce React re-renders (every 3rd frame)
     gameEngine.onStateUpdate = (state) => {
       gameStateRef.current = state;
-      setGameState(state);
+      stateUpdateCounterRef.current++;
+      if (stateUpdateCounterRef.current % 3 === 0) {
+        setGameState(state);
+      }
     };
     gameEngine.onJudgement = (judgement) => {
-      judgementsRef.current = [...judgementsRef.current.slice(-10), judgement];
+      // Limit judgements array mutations
+      const current = judgementsRef.current;
+      if (current.length >= 10) {
+        judgementsRef.current = [...current.slice(-9), judgement];
+      } else {
+        judgementsRef.current = [...current, judgement];
+      }
     };
     gameEngine.onGameEnd = (state) => onGameEnd(state);
     gameEngine.onFail = () => {
@@ -230,7 +266,7 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
   ) => {
     const alpha = Math.min(1, approach * 2);
     
-    // Approach circle
+    // Approach circle (simplified - no alpha per-frame recalc)
     if (approach < 1) {
       const approachRadius = radius + (radius * 2) * (1 - approach);
       ctx.beginPath();
@@ -241,18 +277,11 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
       ctx.stroke();
     }
     
-    // Hit circle body
+    // Hit circle body - simplified solid fill instead of gradient for performance
     ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.arc(circle.x, circle.y, radius, 0, Math.PI * 2);
-    
-    const gradient = ctx.createRadialGradient(
-      circle.x - radius * 0.3, circle.y - radius * 0.3, 0,
-      circle.x, circle.y, radius
-    );
-    gradient.addColorStop(0, color);
-    gradient.addColorStop(1, shadeColor(color, -30));
-    ctx.fillStyle = gradient;
+    ctx.fillStyle = color;
     ctx.fill();
     
     // Border
@@ -262,18 +291,10 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     
     // Combo number
     ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${radius * 0.8}px Orbitron`;
+    ctx.font = `bold ${Math.round(radius * 0.8)}px Orbitron`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(circle.comboNumber.toString(), circle.x, circle.y);
-    
-    // Glow effect
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 15;
-    ctx.beginPath();
-    ctx.arc(circle.x, circle.y, radius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
     
     ctx.globalAlpha = 1;
   };
@@ -287,64 +308,42 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     progress: number
   ) => {
     const alpha = Math.min(1, approach * 2);
-    ctx.globalAlpha = alpha;
+    const curvePoints = slider.curvePoints;
+    const curveLen = curvePoints.length;
 
-    // Draw slider body
+    // Draw slider body - border first (underneath)
     ctx.beginPath();
     ctx.moveTo(slider.x, slider.y);
-    
-    for (const point of slider.curvePoints) {
-      ctx.lineTo(point.x, point.y);
+    for (let i = 0; i < curveLen; i++) {
+      ctx.lineTo(curvePoints[i].x, curvePoints[i].y);
     }
-    
-    ctx.strokeStyle = color;
-    ctx.lineWidth = radius * 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.globalAlpha = alpha * 0.5;
-    ctx.stroke();
-    
-    // Slider border
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = radius * 2 + 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.globalAlpha = alpha * 0.3;
     ctx.stroke();
     
+    // Slider body fill
+    ctx.strokeStyle = color;
+    ctx.lineWidth = radius * 2;
+    ctx.globalAlpha = alpha * 0.5;
+    ctx.stroke();
+    
     ctx.globalAlpha = alpha;
 
-    // Draw reverse arrows if slides > 1
-    if (slider.slides > 1) {
-      const endPoint = slider.curvePoints.length > 0 
-        ? slider.curvePoints[slider.curvePoints.length - 1] 
-        : { x: slider.x, y: slider.y };
-      
-      // Draw reverse arrow at end
-      drawReverseArrow(ctx, endPoint.x, endPoint.y, slider.x, slider.y, radius, color, alpha);
-      
-      // Draw reverse arrow at start if slides > 2
-      if (slider.slides > 2) {
-        drawReverseArrow(ctx, slider.x, slider.y, endPoint.x, endPoint.y, radius, color, alpha);
-      }
-    }
-
-    // Slider ball (if active)
+    // Slider ball (if active) - simplified, no glow
     if (progress > 0) {
       const ballPos = getSliderPosition(slider, progress);
       ctx.beginPath();
       ctx.arc(ballPos.x, ballPos.y, radius * 0.8, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
-      
-      // Add glow to slider ball
-      ctx.shadowColor = '#ffffff';
-      ctx.shadowBlur = 10;
-      ctx.fill();
-      ctx.shadowBlur = 0;
     }
 
     // Draw end circle
-    if (slider.curvePoints.length > 0) {
-      const endPoint = slider.curvePoints[slider.curvePoints.length - 1];
+    if (curveLen > 0) {
+      const endPoint = curvePoints[curveLen - 1];
       ctx.beginPath();
       ctx.arc(endPoint.x, endPoint.y, radius, 0, Math.PI * 2);
       ctx.strokeStyle = '#ffffff';
@@ -366,41 +365,6 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     }, radius, approach, color);
 
     ctx.globalAlpha = 1;
-  };
-
-  const drawReverseArrow = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    fromX: number,
-    fromY: number,
-    radius: number,
-    color: string,
-    alpha: number
-  ) => {
-    const angle = Math.atan2(fromY - y, fromX - x);
-    const arrowSize = radius * 0.6;
-    
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = color;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    
-    // Draw arrow shape
-    ctx.beginPath();
-    ctx.moveTo(arrowSize, 0);
-    ctx.lineTo(-arrowSize * 0.5, -arrowSize * 0.6);
-    ctx.lineTo(-arrowSize * 0.2, 0);
-    ctx.lineTo(-arrowSize * 0.5, arrowSize * 0.6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    
-    ctx.restore();
   };
 
   const getSliderPosition = (slider: Slider, progress: number) => {
@@ -428,12 +392,11 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     spinsCompleted: number,
     requiredSpins: number
   ) => {
-    const progress = Math.min(1, (currentTime - spinner.time) / (spinner.endTime - spinner.time));
     const completion = Math.min(1, spinsCompleted / requiredSpins);
     
     const centerX = PLAYFIELD_WIDTH / 2;
     const centerY = PLAYFIELD_HEIGHT / 2;
-    const maxRadius = Math.min(PLAYFIELD_WIDTH, PLAYFIELD_HEIGHT) * 0.4;
+    const maxRadius = 153; // Pre-computed: Math.min(512, 384) * 0.4
     
     // Outer ring
     ctx.beginPath();
@@ -449,28 +412,13 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     ctx.lineWidth = 8;
     ctx.stroke();
     
-    // Inner spinning element
-    ctx.save();
-    ctx.translate(centerX, centerY);
-    ctx.rotate(spinsCompleted * Math.PI * 2);
-    
-    for (let i = 0; i < 4; i++) {
-      ctx.rotate(Math.PI / 2);
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(maxRadius * 0.6, 0);
-      ctx.strokeStyle = `rgba(139, 92, 246, ${0.3 + completion * 0.7})`;
-      ctx.lineWidth = 4;
-      ctx.stroke();
-    }
-    
-    ctx.restore();
-    
-    // Center circle
+    // Simplified center circle
     ctx.beginPath();
     ctx.arc(centerX, centerY, 30 + completion * 20, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(139, 92, 246, ${0.5 + completion * 0.5})`;
+    ctx.fillStyle = '#8b5cf6';
+    ctx.globalAlpha = 0.5 + completion * 0.5;
     ctx.fill();
+    ctx.globalAlpha = 1;
     
     // Spin count text
     ctx.fillStyle = '#ffffff';
@@ -525,18 +473,6 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     ctx.globalAlpha = 1;
   };
 
-  const shadeColor = (color: string, percent: number) => {
-    const num = parseInt(color.replace('#', ''), 16);
-    const amt = Math.round(2.55 * percent);
-    const R = (num >> 16) + amt;
-    const G = (num >> 8 & 0x00FF) + amt;
-    const B = (num & 0x0000FF) + amt;
-    return '#' + (0x1000000 + 
-      (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 + 
-      (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 + 
-      (B < 255 ? B < 1 ? 0 : B : 255)
-    ).toString(16).slice(1);
-  };
 
   // Use native event listeners for better mobile performance
   useEffect(() => {
