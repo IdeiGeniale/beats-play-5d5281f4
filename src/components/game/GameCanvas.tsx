@@ -183,10 +183,23 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
       
       if (processedObjects.has(i)) continue;
       
+      // Keep circles briefly after their hit time, but keep sliders/spinners visible through their full duration.
       const timeUntilHit = obj.time - currentTime;
-      
-      // Skip objects outside visible range
-      if (timeUntilHit > approachTime || timeUntilHit < -300) continue;
+
+      // Skip objects that are too early
+      if (timeUntilHit > approachTime) continue;
+
+      // Skip objects that are too late (type-specific)
+      if (obj.type === 'circle') {
+        if (timeUntilHit < -300) continue;
+      } else if (obj.type === 'slider') {
+        const slider = obj as Slider;
+        const sliderEnd = slider.time + slider.duration;
+        if (currentTime > sliderEnd + 300 && !activeSliders.has(i)) continue;
+      } else if (obj.type === 'spinner') {
+        const spinner = obj as Spinner;
+        if (currentTime > spinner.endTime + 300 && !activeSpinners.has(i)) continue;
+      }
       
       const approachProgress = Math.max(0, Math.min(1, 1 - timeUntilHit / approachTime));
       const comboColor = comboColors[obj.comboColor % comboColors.length];

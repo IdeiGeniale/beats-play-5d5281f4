@@ -69,16 +69,25 @@ export function parseOsuFile(content: string): Beatmap {
 
   // Calculate slider durations based on timing points
   beatmap.hitObjects.forEach(obj => {
-    if (obj.type === 'slider') {
-      const slider = obj as Slider;
-      const timingPoint = getTimingPointAt(beatmap.timingPoints, slider.time);
-      if (timingPoint) {
-        const beatLength = timingPoint.beatLength > 0 ? timingPoint.beatLength : 500;
-        const sliderVelocity = timingPoint.beatLength < 0 ? Math.abs(100 / timingPoint.beatLength) : 1;
-        slider.duration = (slider.length / (beatmap.sliderMultiplier * 100 * sliderVelocity)) * beatLength * slider.slides;
-        slider.tickCount = Math.max(1, Math.floor(slider.length / (100 * beatmap.sliderMultiplier / beatmap.sliderTickRate)));
-      }
+    if (obj.type !== 'slider') return;
+
+    const slider = obj as Slider;
+    const timingPoint = getTimingPointAt(beatmap.timingPoints, slider.time);
+
+    // Fallback to a sane default if timing points are missing
+    const beatLengthRaw = timingPoint?.beatLength ?? 500;
+    const beatLength = beatLengthRaw > 0 ? beatLengthRaw : 500;
+    const sliderVelocity = beatLengthRaw < 0 ? Math.abs(100 / beatLengthRaw) : 1;
+
+    slider.duration = (slider.length / (beatmap.sliderMultiplier * 100 * sliderVelocity)) * beatLength * slider.slides;
+    if (!Number.isFinite(slider.duration) || slider.duration <= 0) {
+      slider.duration = 1;
     }
+
+    slider.tickCount = Math.max(
+      1,
+      Math.floor(slider.length / (100 * beatmap.sliderMultiplier / beatmap.sliderTickRate))
+    );
   });
 
   return beatmap;
