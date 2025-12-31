@@ -450,18 +450,18 @@ export class GameEngine {
   handleMouseMove(x: number, y: number): void {
     if (!this.isRunning) return;
 
-    this.lastMousePos = { x, y };
+    this.lastMousePos.x = x;
+    this.lastMousePos.y = y;
 
-    // Update slider tracking (allow re-acquire if cursor returns to the ball)
+    // Update slider tracking - use cached values
+    const cr = this.circleRadius * 2.5;
+    const crSq = cr * cr;
+    
     for (const [, activeSlider] of this.activeSliders) {
       const sliderPos = this.getSliderPosition(activeSlider.slider, activeSlider.progress);
-      const inFollowRadius = this.isPointInCircle(
-        x,
-        y,
-        sliderPos.x,
-        sliderPos.y,
-        this.circleRadius * 2.5
-      );
+      const dx = x - sliderPos.x;
+      const dy = y - sliderPos.y;
+      const inFollowRadius = dx * dx + dy * dy <= crSq;
 
       activeSlider.isHeld = inFollowRadius;
       if (inFollowRadius) {
@@ -469,10 +469,9 @@ export class GameEngine {
       }
     }
 
-    // Update spinner rotation - works for any active spinner
-    for (const [index, activeSpinner] of this.activeSpinners) {
+    // Update spinner rotation - simplified calculation
+    for (const [, activeSpinner] of this.activeSpinners) {
       if (activeSpinner.lastAngle === null) {
-        // First movement - initialize the angle
         activeSpinner.lastAngle = Math.atan2(y - 192, x - 256);
         continue;
       }
@@ -480,18 +479,18 @@ export class GameEngine {
       const angle = Math.atan2(y - 192, x - 256);
       let deltaAngle = angle - activeSpinner.lastAngle;
       
-      // Normalize angle difference to handle wrap-around
-      if (deltaAngle > Math.PI) deltaAngle -= 2 * Math.PI;
-      if (deltaAngle < -Math.PI) deltaAngle += 2 * Math.PI;
+      // Normalize angle difference
+      if (deltaAngle > Math.PI) deltaAngle -= 6.283185307179586; // 2 * Math.PI
+      if (deltaAngle < -Math.PI) deltaAngle += 6.283185307179586;
       
-      // Accumulate rotation (absolute value for spinning in any direction)
-      activeSpinner.rotation += Math.abs(deltaAngle);
+      // Accumulate rotation
+      activeSpinner.rotation += deltaAngle > 0 ? deltaAngle : -deltaAngle;
       activeSpinner.lastAngle = angle;
       
-      // Count spins (full rotation = 2*PI)
-      const newSpins = activeSpinner.rotation / (2 * Math.PI);
+      // Count spins
+      const newSpins = activeSpinner.rotation * 0.15915494309189535; // 1 / (2 * Math.PI)
       if (newSpins > activeSpinner.spinsCompleted) {
-        const spinsGained = Math.floor(newSpins) - Math.floor(activeSpinner.spinsCompleted);
+        const spinsGained = (newSpins | 0) - (activeSpinner.spinsCompleted | 0);
         activeSpinner.spinsCompleted = newSpins;
         if (spinsGained > 0) {
           this.addScore(100 * spinsGained, false);
