@@ -397,16 +397,20 @@ export class GameEngine {
 
     this.lastMousePos = { x, y };
 
-    // Update slider tracking
-    for (const [index, activeSlider] of this.activeSliders) {
-      if (activeSlider.isHeld) {
-        const sliderPos = this.getSliderPosition(activeSlider.slider, activeSlider.progress);
-        if (this.isPointInCircle(x, y, sliderPos.x, sliderPos.y, this.circleRadius * 2.5)) {
-          // Still tracking
-          activeSlider.ticksHit++;
-        } else {
-          activeSlider.isHeld = false;
-        }
+    // Update slider tracking (allow re-acquire if cursor returns to the ball)
+    for (const [, activeSlider] of this.activeSliders) {
+      const sliderPos = this.getSliderPosition(activeSlider.slider, activeSlider.progress);
+      const inFollowRadius = this.isPointInCircle(
+        x,
+        y,
+        sliderPos.x,
+        sliderPos.y,
+        this.circleRadius * 2.5
+      );
+
+      activeSlider.isHeld = inFollowRadius;
+      if (inFollowRadius) {
+        activeSlider.ticksHit++;
       }
     }
 
