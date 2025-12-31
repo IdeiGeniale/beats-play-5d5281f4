@@ -141,6 +141,7 @@ export interface Mod {
 }
 
 export const MODS: Mod[] = [
+  { id: 'auto', name: 'Auto', shortName: 'AT', description: 'Watch the game play itself', multiplier: 0, icon: '🤖' },
   { id: 'ez', name: 'Easy', shortName: 'EZ', description: 'Larger hit circles, more forgiving HP drain', multiplier: 0.5, icon: '🟢' },
   { id: 'hr', name: 'Hard Rock', shortName: 'HR', description: 'Smaller hit circles, stricter timing', multiplier: 1.06, icon: '🔴' },
   { id: 'dt', name: 'Double Time', shortName: 'DT', description: 'Play at 1.5x speed', multiplier: 1.12, icon: '⏩' },

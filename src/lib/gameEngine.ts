@@ -175,11 +175,18 @@ export class GameEngine {
     // Apply speed mod
     const timeMultiplier = this.mods.has('dt') ? 1.5 : this.mods.has('ht') ? 0.75 : 1;
     
+    // Auto mod - play automatically
+    if (this.mods.has('auto')) {
+      this.updateAuto();
+    }
+    
     // Auto-activate spinners when they start
     this.activateSpinners();
     
-    // Check for missed objects
-    this.checkMissedObjects();
+    // Check for missed objects (skip if auto mod)
+    if (!this.mods.has('auto')) {
+      this.checkMissedObjects();
+    }
     
     // Update active sliders
     this.updateActiveSliders();
@@ -231,6 +238,54 @@ export class GameEngine {
 
     if (this.onStateUpdate) {
       this.onStateUpdate({ ...this.gameState });
+    }
+  }
+
+  private updateAuto(): void {
+    if (!this.beatmap) return;
+
+    for (let i = 0; i < this.beatmap.hitObjects.length; i++) {
+      const obj = this.beatmap.hitObjects[i];
+      if (this.processedObjects.has(i)) continue;
+
+      if (obj.type === 'circle') {
+        // Hit circles at their time
+        if (this.currentTime >= obj.time && this.currentTime <= obj.time + 50) {
+          this.lastMousePos = { x: obj.x, y: obj.y };
+          this.processHit(i, 'perfect', obj);
+        }
+      } else if (obj.type === 'slider') {
+        const slider = obj as Slider;
+        // Start slider at its time
+        if (this.currentTime >= slider.time && !this.activeSliders.has(i)) {
+          this.lastMousePos = { x: slider.x, y: slider.y };
+          this.activeSliders.set(i, {
+            slider,
+            progress: 0,
+            ticksHit: slider.tickCount,
+            isHeld: true,
+            startHit: true,
+          });
+          this.addScore(100, true);
+        }
+        // Update slider position for auto
+        const activeSlider = this.activeSliders.get(i);
+        if (activeSlider) {
+          const pos = this.getSliderPosition(slider, activeSlider.progress);
+          this.lastMousePos = { x: pos.x, y: pos.y };
+          activeSlider.ticksHit = slider.tickCount; // Always hit all ticks
+        }
+      } else if (obj.type === 'spinner') {
+        const spinner = obj as Spinner;
+        if (this.currentTime >= spinner.time && this.currentTime <= spinner.endTime) {
+          // Auto-spin
+          const activeSpinner = this.activeSpinners.get(i);
+          if (activeSpinner) {
+            activeSpinner.spinsCompleted = activeSpinner.requiredSpins + 1;
+            activeSpinner.rotation = activeSpinner.requiredSpins * Math.PI * 2;
+          }
+        }
+      }
     }
   }
 

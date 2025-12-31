@@ -538,62 +538,73 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     ).toString(16).slice(1);
   };
 
-  // Handle input
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isPaused || showCountdown) return;
-    
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const x = (e.clientX - rect.left - offset.x) / scale;
-    const y = (e.clientY - rect.top - offset.y) / scale;
-    
-    gameEngine.handleClick(x, y);
-  };
+  // Use native event listeners for better mobile performance
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isPaused || showCountdown) return;
-    
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const x = (e.clientX - rect.left - offset.x) / scale;
-    const y = (e.clientY - rect.top - offset.y) / scale;
-    
-    gameEngine.handleMouseMove(x, y);
-  };
+    const getCoords = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (clientX - rect.left - offset.x) / scale,
+        y: (clientY - rect.top - offset.y) / scale,
+      };
+    };
 
-  const handleMouseUp = () => {
-    gameEngine.handleMouseUp();
-  };
+    const handleTouchStart = (e: TouchEvent) => {
+      if (isPaused || showCountdown) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const { x, y } = getCoords(touch.clientX, touch.clientY);
+      gameEngine.handleClick(x, y);
+    };
 
-  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (isPaused || showCountdown) return;
-    e.preventDefault();
-    
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const touch = e.touches[0];
-    const x = (touch.clientX - rect.left - offset.x) / scale;
-    const y = (touch.clientY - rect.top - offset.y) / scale;
-    
-    gameEngine.handleClick(x, y);
-  };
+    const handleTouchMove = (e: TouchEvent) => {
+      if (isPaused || showCountdown) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const { x, y } = getCoords(touch.clientX, touch.clientY);
+      gameEngine.handleMouseMove(x, y);
+    };
 
-  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (isPaused || showCountdown) return;
-    e.preventDefault();
-    
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    
-    const touch = e.touches[0];
-    const x = (touch.clientX - rect.left - offset.x) / scale;
-    const y = (touch.clientY - rect.top - offset.y) / scale;
-    
-    gameEngine.handleMouseMove(x, y);
-  };
+    const handleTouchEnd = (e: TouchEvent) => {
+      gameEngine.handleMouseUp();
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      if (isPaused || showCountdown || isMobile) return;
+      const { x, y } = getCoords(e.clientX, e.clientY);
+      gameEngine.handleClick(x, y);
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isPaused || showCountdown || isMobile) return;
+      const { x, y } = getCoords(e.clientX, e.clientY);
+      gameEngine.handleMouseMove(x, y);
+    };
+
+    const handleMouseUp = () => {
+      if (isMobile) return;
+      gameEngine.handleMouseUp();
+    };
+
+    // Use passive: false for touch events to prevent delay
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouchStart);
+      canvas.removeEventListener('touchmove', handleTouchMove);
+      canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isPaused, showCountdown, isMobile, scale, offset]);
 
   const togglePause = () => {
     if (isPaused) {
@@ -672,13 +683,6 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
         height={PLAYFIELD_HEIGHT * scale + offset.y * 2}
         className="absolute inset-0 w-full h-full touch-none"
         style={{ cursor: isMobile ? 'none' : 'crosshair' }}
-        onClick={!isMobile ? handleCanvasClick : undefined}
-        onMouseMove={!isMobile ? handleMouseMove : undefined}
-        onMouseUp={!isMobile ? handleMouseUp : undefined}
-        onMouseDown={!isMobile ? handleCanvasClick : undefined}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleMouseUp}
       />
 
       {/* Countdown */}
