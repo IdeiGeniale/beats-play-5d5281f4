@@ -9,6 +9,7 @@ class AudioEngine {
   private pauseTime: number = 0;
   private isPlaying: boolean = false;
   private playbackRate: number = 1;
+  private audioFile: File | null = null;
 
   async init(): Promise<void> {
     if (!this.audioContext) {
@@ -31,9 +32,14 @@ class AudioEngine {
 
   async loadAudioFromFile(file: File): Promise<AudioBuffer> {
     await this.init();
+    this.audioFile = file;
     const arrayBuffer = await file.arrayBuffer();
     this.audioBuffer = await this.audioContext!.decodeAudioData(arrayBuffer);
     return this.audioBuffer;
+  }
+
+  getAudioFile(): File | null {
+    return this.audioFile;
   }
 
   play(startOffset: number = 0): void {
