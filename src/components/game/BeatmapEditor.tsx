@@ -9,7 +9,8 @@ import {
   Save, 
   Trash2,
   Grid,
-  Music
+  Music,
+  Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,8 @@ import { Beatmap, HitCircle, Slider as SliderType, Spinner } from '@/types/game'
 import { exportOsuFile } from '@/lib/osuParser';
 import { audioEngine } from '@/lib/audioEngine';
 import { toast } from 'sonner';
+import JSZip from 'jszip';
+import { TimelineSection } from './EditorTimeline';
 
 interface BeatmapEditorProps {
   onBack: () => void;
@@ -262,8 +265,8 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
     toast.success('Object deleted');
   };
 
-  // Export beatmap
-  const handleExport = () => {
+  // Export .osu beatmap
+  const handleExportOsu = () => {
     const content = exportOsuFile(beatmap);
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -272,7 +275,36 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
     a.download = `${beatmap.artist} - ${beatmap.title} (${beatmap.creator}) [${beatmap.version}].osu`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('Beatmap exported!');
+    toast.success('Beatmap exported as .osu!');
+  };
+
+  // Export .osz package
+  const handleExportOsz = async () => {
+    const audioFile = audioEngine.getAudioFile();
+    if (!audioFile) {
+      toast.error('Load an audio file first to export .osz');
+      return;
+    }
+
+    const zip = new JSZip();
+    
+    // Add .osu file
+    const osuContent = exportOsuFile(beatmap);
+    const osuFilename = `${beatmap.artist} - ${beatmap.title} (${beatmap.creator}) [${beatmap.version}].osu`;
+    zip.file(osuFilename, osuContent);
+    
+    // Add audio file
+    zip.file(beatmap.audioFilename, audioFile);
+    
+    // Generate and download
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${beatmap.artist} - ${beatmap.title}.osz`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Beatmap exported as .osz package!');
   };
 
   // Draw editor
@@ -413,12 +445,19 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
           <Music className="w-5 h-5" />
         </Button>
         
-        <Button variant="neon" size="sm" className="hidden sm:flex" onClick={handleExport}>
+        <Button variant="outline" size="sm" className="hidden sm:flex" onClick={handleExportOsu}>
           <Save className="w-4 h-4 mr-2" />
-          Export .osu
+          .osu
         </Button>
-        <Button variant="neon" size="icon" className="sm:hidden" onClick={handleExport}>
+        <Button variant="neon" size="sm" className="hidden sm:flex" onClick={handleExportOsz}>
+          <Package className="w-4 h-4 mr-2" />
+          .osz
+        </Button>
+        <Button variant="ghost" size="icon" className="sm:hidden" onClick={handleExportOsu}>
           <Save className="w-5 h-5" />
+        </Button>
+        <Button variant="neon" size="icon" className="sm:hidden" onClick={handleExportOsz}>
+          <Package className="w-5 h-5" />
         </Button>
       </header>
 
@@ -541,84 +580,20 @@ export const BeatmapEditor = ({ onBack }: BeatmapEditorProps) => {
           </div>
 
           {/* Timeline - responsive */}
-          <div className="h-auto min-h-[100px] sm:h-32 border-t border-border/30 p-2 sm:p-4 flex-shrink-0">
-            <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-4 flex-wrap">
-              <Button variant="ghost" size="icon" onClick={togglePlayback}>
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              </Button>
-              
-              <span className="font-mono text-xs sm:text-sm">
-                {Math.floor(currentTime / 60000)}:{Math.floor((currentTime % 60000) / 1000).toString().padStart(2, '0')}
-              </span>
-              
-              <UISlider
-                className="flex-1 min-w-[100px]"
-                value={[currentTime]}
-                onValueChange={([v]) => {
-                  setCurrentTime(v);
-                  if (!isPlaying) {
-                    audioEngine.seekTo(v);
-                  }
-                }}
-                max={audioLoaded ? audioEngine.getDuration() : 300000}
-                step={1}
-              />
-              
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Label className="text-xs hidden sm:inline">BPM:</Label>
-                <Input
-                  type="number"
-                  value={bpm}
-                  onChange={(e) => setBpm(Number(e.target.value) || 120)}
-                  className="w-16 sm:w-20 h-8 text-xs"
-                />
-              </div>
-              
-              <div className="flex items-center gap-1 sm:gap-2">
-                <Label className="text-xs hidden sm:inline">Snap:</Label>
-                <select
-                  value={beatSnap}
-                  onChange={(e) => setBeatSnap(Number(e.target.value))}
-                  className="h-8 px-2 rounded bg-muted border border-border text-xs sm:text-sm"
-                >
-                  <option value={1}>1/1</option>
-                  <option value={2}>1/2</option>
-                  <option value={4}>1/4</option>
-                  <option value={8}>1/8</option>
-                  <option value={16}>1/16</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Object timeline */}
-            <div 
-              ref={timelineRef}
-              className="relative h-8 sm:h-12 bg-muted rounded overflow-hidden"
-            >
-              {beatmap.hitObjects.map((obj, i) => {
-                const duration = audioLoaded ? audioEngine.getDuration() : 300000;
-                const left = (obj.time / duration) * 100;
-                return (
-                  <div
-                    key={i}
-                    className={`absolute top-1/2 -translate-y-1/2 w-1.5 sm:w-2 h-6 sm:h-8 rounded cursor-pointer transition-colors ${
-                      i === selectedObject ? 'bg-primary' : 'bg-secondary'
-                    }`}
-                    style={{ left: `${left}%` }}
-                    onClick={() => setSelectedObject(i)}
-                  />
-                );
-              })}
-              
-              {/* Playhead */}
-              <div
-                className="absolute top-0 bottom-0 w-0.5 bg-primary"
-                style={{ 
-                  left: `${(currentTime / (audioLoaded ? audioEngine.getDuration() : 300000)) * 100}%` 
-                }}
-              />
-            </div>
-          </div>
+          <TimelineSection
+            currentTime={currentTime}
+            setCurrentTime={setCurrentTime}
+            isPlaying={isPlaying}
+            togglePlayback={togglePlayback}
+            audioLoaded={audioLoaded}
+            bpm={bpm}
+            setBpm={setBpm}
+            beatSnap={beatSnap}
+            setBeatSnap={setBeatSnap}
+            beatmap={beatmap}
+            selectedObject={selectedObject}
+            setSelectedObject={setSelectedObject}
+          />
         </div>
 
         {/* Properties panel - collapsible on mobile */}
