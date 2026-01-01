@@ -341,7 +341,7 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
       ctx.fill();
     }
 
-    // Draw end circle
+    // Draw end circle and reverse arrows
     if (curveLen > 0) {
       const endPoint = curvePoints[curveLen - 1];
       ctx.beginPath();
@@ -350,6 +350,28 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
       ctx.lineWidth = 3;
       ctx.globalAlpha = alpha * 0.6;
       ctx.stroke();
+      
+      // Draw reverse arrows if slider has multiple slides
+      if (slider.slides > 1) {
+        // Calculate which reverse arrows to show based on progress
+        const currentSlide = Math.floor(progress * slider.slides);
+        
+        // Arrow at end (visible when going forward on even slides)
+        if (currentSlide < slider.slides - 1) {
+          const showEndArrow = currentSlide % 2 === 0 || currentSlide === 0;
+          if (showEndArrow) {
+            drawReverseArrow(ctx, endPoint.x, endPoint.y, slider.x, slider.y, radius, alpha);
+          }
+        }
+        
+        // Arrow at start (visible when going backward on odd slides)
+        if (slider.slides > 1 && currentSlide < slider.slides - 1) {
+          const showStartArrow = currentSlide % 2 === 1;
+          if (showStartArrow) {
+            drawReverseArrow(ctx, slider.x, slider.y, endPoint.x, endPoint.y, radius, alpha);
+          }
+        }
+      }
     }
 
     ctx.globalAlpha = alpha;
@@ -367,6 +389,40 @@ export const GameCanvas = ({ beatmap, mods, onGameEnd, onBack }: GameCanvasProps
     ctx.globalAlpha = 1;
   };
 
+  const drawReverseArrow = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    fromX: number,
+    fromY: number,
+    radius: number,
+    alpha: number
+  ) => {
+    // Calculate direction from the previous point
+    const dx = x - fromX;
+    const dy = y - fromY;
+    const angle = Math.atan2(dy, dx);
+    
+    const arrowSize = radius * 0.6;
+    
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle + Math.PI); // Point back toward start
+    
+    // Draw chevron arrow
+    ctx.beginPath();
+    ctx.moveTo(-arrowSize * 0.4, -arrowSize * 0.5);
+    ctx.lineTo(arrowSize * 0.4, 0);
+    ctx.lineTo(-arrowSize * 0.4, arrowSize * 0.5);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = alpha;
+    ctx.stroke();
+    
+    ctx.restore();
+  };
   const getSliderPosition = (slider: Slider, progress: number) => {
     const slideNumber = Math.floor(progress * slider.slides);
     let t = (progress * slider.slides) % 1;
