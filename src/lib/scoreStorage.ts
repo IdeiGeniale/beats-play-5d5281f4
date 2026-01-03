@@ -11,13 +11,14 @@ export const saveScore = (
   beatmap: Beatmap,
   mods: string[]
 ): SavedScore => {
+  const totalObjects = beatmap.hitObjects.length;
   const score: SavedScore = {
     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     beatmapName: beatmap.title,
     difficulty: beatmap.version,
     artist: beatmap.artist,
     mods,
-    grade: getGrade(state.accuracy, state.missCount),
+    grade: getGrade(state.score, state.maxCombo, totalObjects),
     score: state.score,
     accuracy: state.accuracy,
     maxCombo: state.maxCombo,
