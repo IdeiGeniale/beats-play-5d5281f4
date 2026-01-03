@@ -16,6 +16,7 @@ export interface SavedScore {
   greatCount: number;
   goodCount: number;
   missCount: number;
+  pp: number;
   timestamp: number;
 }
 
@@ -46,4 +47,39 @@ export const getGradeColor = (grade: Grade): string => {
     case 'C': return 'text-primary';
     case 'D': return 'text-destructive';
   }
+};
+
+// Calculate Performance Points (PP)
+export const calculatePP = (
+  accuracy: number,
+  maxCombo: number,
+  totalObjects: number,
+  missCount: number,
+  mods: string[]
+): number => {
+  // Base PP from object count (difficulty estimation)
+  const basePP = Math.pow(totalObjects, 0.8) * 2;
+  
+  // Accuracy multiplier (exponential scaling)
+  const accMultiplier = Math.pow(accuracy / 100, 4);
+  
+  // Combo multiplier (ratio of achieved combo to max possible)
+  const comboRatio = Math.min(maxCombo / Math.max(totalObjects, 1), 1);
+  const comboMultiplier = Math.pow(comboRatio, 0.8);
+  
+  // Miss penalty (each miss reduces PP significantly)
+  const missPenalty = Math.pow(0.97, missCount);
+  
+  // Mod multipliers
+  let modMultiplier = 1.0;
+  if (mods.includes('HR')) modMultiplier *= 1.1;
+  if (mods.includes('DT')) modMultiplier *= 1.12;
+  if (mods.includes('HD')) modMultiplier *= 1.06;
+  if (mods.includes('FL')) modMultiplier *= 1.12;
+  if (mods.includes('EZ')) modMultiplier *= 0.5;
+  if (mods.includes('HT')) modMultiplier *= 0.5;
+  
+  const pp = basePP * accMultiplier * comboMultiplier * missPenalty * modMultiplier;
+  
+  return Math.round(pp * 100) / 100;
 };
