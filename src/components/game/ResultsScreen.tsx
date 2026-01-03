@@ -14,11 +14,17 @@ interface ResultsScreenProps {
 
 export const ResultsScreen = ({ state, beatmap, mods, onBack, onRetry, onWatchReplay }: ResultsScreenProps) => {
   const getRank = () => {
-    if (state.accuracy >= 100) return { grade: 'SS', color: 'text-gold' };
-    if (state.accuracy >= 95) return { grade: 'S', color: 'text-gold' };
-    if (state.accuracy >= 90) return { grade: 'A', color: 'text-secondary' };
-    if (state.accuracy >= 80) return { grade: 'B', color: 'text-accent' };
-    if (state.accuracy >= 70) return { grade: 'C', color: 'text-primary' };
+    const totalObjects = beatmap.hitObjects.length;
+    const baseMaxScore = totalObjects * 300;
+    const comboBonus = Math.min(state.maxCombo / Math.max(totalObjects, 1), 1);
+    const scoreRatio = Math.min(state.score / Math.max(baseMaxScore, 1), 1);
+    const performance = (scoreRatio * 0.7) + (comboBonus * 0.3);
+    
+    if (performance >= 0.98 && state.maxCombo >= totalObjects) return { grade: 'SS', color: 'text-gold' };
+    if (performance >= 0.90) return { grade: 'S', color: 'text-gold' };
+    if (performance >= 0.80) return { grade: 'A', color: 'text-secondary' };
+    if (performance >= 0.65) return { grade: 'B', color: 'text-accent' };
+    if (performance >= 0.50) return { grade: 'C', color: 'text-primary' };
     return { grade: 'D', color: 'text-destructive' };
   };
 

@@ -19,12 +19,21 @@ export interface SavedScore {
   timestamp: number;
 }
 
-export const getGrade = (accuracy: number, missCount: number): Grade => {
-  if (accuracy >= 100 && missCount === 0) return 'SS';
-  if (accuracy >= 95) return 'S';
-  if (accuracy >= 90) return 'A';
-  if (accuracy >= 80) return 'B';
-  if (accuracy >= 70) return 'C';
+export const getGrade = (score: number, maxCombo: number, totalObjects: number): Grade => {
+  // Estimate max possible score: 300 points per object with perfect combo multiplier
+  const baseMaxScore = totalObjects * 300;
+  // Combo bonus estimation (simplified)
+  const comboBonus = Math.min(maxCombo / Math.max(totalObjects, 1), 1);
+  
+  // Performance ratio based on score and combo
+  const scoreRatio = Math.min(score / Math.max(baseMaxScore, 1), 1);
+  const performance = (scoreRatio * 0.7) + (comboBonus * 0.3);
+  
+  if (performance >= 0.98 && maxCombo >= totalObjects) return 'SS';
+  if (performance >= 0.90) return 'S';
+  if (performance >= 0.80) return 'A';
+  if (performance >= 0.65) return 'B';
+  if (performance >= 0.50) return 'C';
   return 'D';
 };
 
