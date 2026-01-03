@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Trophy, Trash2, Calendar, Target, Zap } from 'lucide-react';
+import { ArrowLeft, Trophy, Trash2, Calendar, Target, Zap, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getScores, deleteScore, clearScores } from '@/lib/scoreStorage';
 import { SavedScore, getGradeColor } from '@/types/score';
@@ -121,6 +121,12 @@ export const ScoresScreen = ({ onBack }: ScoresScreenProps) => {
                     {/* Stats */}
                     <div className="hidden md:flex items-center gap-6 text-sm">
                       <div className="text-center">
+                        <div className="flex items-center gap-1 text-accent font-semibold">
+                          <Star className="w-3 h-3" />
+                          <span>{(score.pp ?? 0).toFixed(0)}pp</span>
+                        </div>
+                      </div>
+                      <div className="text-center">
                         <div className="flex items-center gap-1 text-muted-foreground">
                           <Trophy className="w-3 h-3" />
                           <span>{score.score.toLocaleString()}</span>
@@ -159,6 +165,7 @@ export const ScoresScreen = ({ onBack }: ScoresScreenProps) => {
 
                   {/* Mobile stats */}
                   <div className="flex md:hidden items-center gap-4 mt-3 pt-3 border-t border-border/50 text-xs">
+                    <span className="text-accent font-semibold">{(score.pp ?? 0).toFixed(0)}pp</span>
                     <span className="text-muted-foreground">{score.score.toLocaleString()}</span>
                     <span className="text-secondary">{score.accuracy.toFixed(2)}%</span>
                     <span className="text-primary">{score.maxCombo}x</span>
