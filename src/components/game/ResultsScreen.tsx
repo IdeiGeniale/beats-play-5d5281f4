@@ -1,8 +1,7 @@
 import { motion } from 'framer-motion';
-import { Trophy, Target, Zap, XCircle, ArrowLeft, RotateCcw, Play, Star } from 'lucide-react';
+import { Trophy, Target, Zap, XCircle, ArrowLeft, RotateCcw, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { GameState, Beatmap } from '@/types/game';
-import { calculatePP } from '@/types/score';
 
 interface ResultsScreenProps {
   state: GameState;
@@ -30,8 +29,6 @@ export const ResultsScreen = ({ state, beatmap, mods, onBack, onRetry, onWatchRe
   };
 
   const rank = getRank();
-  const totalObjects = beatmap.hitObjects.length;
-  const pp = calculatePP(state.accuracy, state.maxCombo, totalObjects, state.missCount, mods);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -88,9 +85,9 @@ export const ResultsScreen = ({ state, beatmap, mods, onBack, onRetry, onWatchRe
         >
           {[
             { label: 'Score', value: state.score.toLocaleString(), icon: Trophy, color: 'text-gold' },
-            { label: 'PP', value: pp.toFixed(0), icon: Star, color: 'text-accent' },
             { label: 'Accuracy', value: `${state.accuracy.toFixed(2)}%`, icon: Target, color: 'text-secondary' },
             { label: 'Max Combo', value: `${state.maxCombo}x`, icon: Zap, color: 'text-primary' },
+            { label: 'Misses', value: state.missCount, icon: XCircle, color: 'text-destructive' },
           ].map((stat, i) => (
             <motion.div
               key={stat.label}

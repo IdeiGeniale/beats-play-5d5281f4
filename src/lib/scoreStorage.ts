@@ -1,4 +1,4 @@
-import { SavedScore, getGrade, calculatePP } from '@/types/score';
+import { SavedScore, getGrade } from '@/types/score';
 import { GameState, Beatmap, Replay } from '@/types/game';
 
 const SCORES_KEY = 'beats66_scores';
@@ -12,8 +12,6 @@ export const saveScore = (
   mods: string[]
 ): SavedScore => {
   const totalObjects = beatmap.hitObjects.length;
-  const pp = calculatePP(state.accuracy, state.maxCombo, totalObjects, state.missCount, mods);
-  
   const score: SavedScore = {
     id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     beatmapName: beatmap.title,
@@ -28,7 +26,6 @@ export const saveScore = (
     greatCount: state.greatCount,
     goodCount: state.goodCount,
     missCount: state.missCount,
-    pp,
     timestamp: Date.now(),
   };
 
