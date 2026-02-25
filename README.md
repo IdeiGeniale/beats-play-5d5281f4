@@ -125,4 +125,4 @@ This project is open source. See [LICENSE](LICENSE) for details.
 
 ---
 
-*Built with [Lovable](https://lovable.dev)*
+*Built using [Lovable](https://lovable.dev)*
